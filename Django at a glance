@@ -1,1 +1,199 @@
+#设计你的模型
+虽然你可以在没有数据库的情况下使用Django，但是它本身附带一个对象关系映射器，可以使用python代码描述数据库的布局
+'''
+from django.db import models
+
+class Reporter(models.Model):
+    full_name = models.CharField(max_length=100)
+
+    def __str__(self):
+        return self.full_name
+
+class Article(models.Model):
+    title = models.CharField(max_length=100)
+    content = models.TextField()
+
+    def __str__(self):
+        return self.title
+'''
+
+#安装
+接下来需要运行Django命令实用程序自动创建数据库表
+需要在终端接口运行
+
+python manage.py makemigrations
+python manage.py migrate  
+
+该makemigrations命令查看所有可用的模型并为尚不存在的表创建迁移。migrate运行迁移并在数据库中创建表，还可以选择提供更丰富的模式控制
+
+#享受免费API
+这样，你就拥有了一个免费且丰富的Python API来访问你的数据。该API是即时创建的，无需代码生成
+'''
+from news.models import Article,Reporter
+from datetime import date
+
+from study import Reporter
+
+Reporter.objects.all()
+
+r=Reporter(full_name="John Smith")
+#保存数据到数据库
+r.save()
+#此时r有创建的id
+r.id
+
+#此时这个新通告存在数据库中
+Reporter.objects.all()
+#字段被表示为 Python 对象上的属性
+r.full_name
+#"John Smith"
+
+#Django提供大量丰富的数据库查询API
+Reporter.objects.get(id=1)
+#<Reporter:John Smith>
+Reporter.objects.get(full_name__startswith="John")
+Reporter.objects.get(full_name__contains="Smith")
+Reporter.objects.get(id=2)
+#错误查询
+#id为2的数据并不存在
+
+#创建一个新的Article
+a=Article(
+    pub_date=date.today(),headline="hello Django",content="hello Django",repoorter=r
+)
+a.save()
+
+#现在这个Article存在于数据库当中
+Article.objects.all()
+
+#Article 获取API通过 Reporter
+r.article_set.all()
+#API 会根据需要追踪关系，在后台为你执行高效的 JOIN 操作。
+#这会查找名字以“John”开头的所有记者的文章
+
+r.full_name="Billy Goat"
+r.save()
+
+#使用delete（）删除一个新对象
+r.delete()
+'''
+{这边通过API对数据库的调用与C#语法的使用大致相同}
+
+#动态管理界面
+定义好模型后，Django会自动创建一个专业的、可立即投入生产的管理界面——一个经过身份验证的用户添加/修改/删除对象的网站。
+唯一需要做的就是在管理站点中注册你的模型
+'''
+from django.db import models
+
+class Article(models.Model):
+    pub_date = models.DateField()
+    headline = models.CharField(max_length=200)
+    content = models.TextField()
+    reporter = models.ForeignKey(Reporter, on_delete=models.CASCADE)
+'''
+'''
+from django.contrib import admin
+
+from .import models
+
+admin.site.register(Article)
+'''
+这里的理念是，网站是由员工、客户或者只能是你自己编辑的 而且你不想只创建后端内容来管理界面
+创建Django应用的一个典型工作流程是创建模型并尽块启动并运行管理站点，以便员工or客户可以开始提供数据
+然后，开发数据向公众呈现的方式
+
+#设计你的URL
+简洁优雅的URL方案是高质量Web应用程序中至关重要的细节。Django鼓励使用美观的URL，并且不会在URL中添加任何繁琐的符号
+例如.php或.asp
+
+要为应用程序设计URL，需要创建一个名为URLconf的Python模块。他是应用程序的目录，包含URL模式和Python回调函数之间的
+映射。URLconf还可以将URL与Python代码解耦
+
+Reporter对于上面的示例，URLconf可能如下所示Article：
+'''
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path('article/<int:year>', views.year_archive),
+    path('article/<int:year>/<int:month>', views.month_archive),
+    path('article/<int:year>/<int:month>/<int:pk>', views.article_detail),
+]
+'''
+这边的代码将URL路径映射到Python回调函数。路径符号串使用参数标签从URL中“捕获”值。当用户请求页面的时候，Django
+会按顺序遍历每一个路径，并在第一个与请求匹配的路径处停止。（如果没有匹配的路径，Django会调用一个特殊的404视图）
+由于路径在加载的时候就被编成正则表达式，因此速度非常快
+
+一旦某个URL模式匹配成功，Django就会调用给定的视图，这是一个Python函数。每个视图都会传递一个请求对象（包括请求元数据）
+以及模式中捕获的值  
+
+例，如果用户请求 URL“/articles/2005/05/39323/”，Django将调用该函数。news.views.article_detail(request,year=2005,month=5,pk=39323)
+
+#编写观点
+每个视图负责执行以下两项操作之一：返回HttpReponse包含所请求页面内容中的对象，或引发异常（例如Http404）.其余的自己决定。
+year_archive通常，视图会根据参数获取数据，加载模板，并使用获取的数据渲染模板。以下是上述示例图
+'''
+from django.shortcuts import render
+from .models import Article
+
+def year_archive(request,year):
+    a_list = Article.objects.filter(pub_date__year=year)
+    context = {"year":year,"article_list":a_list}
+    return render(request,"news/year_archive.html",context)
+'''
+这个示例使用的是Django的模板系统，具有几个强大的功能，但力持保持足够简单
+
+#设计模板
+上面的代码加载news/year_archive.html模板
+
+Django有一个模板搜索路径，可以最大程度的减少模板之间的冗余。在Django设置中，可以指定一个目录来查找模板DIRS。
+如果第一个目录中不存在模板，则会检查第二个目录，依次类推
+
+假设news/year_archive.html找到了模板。如下所示
+'''
+from study import Article
+
+{% extend "base.html"%}
+
+{% block title %}Articles for {{year}}{% endblock %}
+
+{% block content %}
+<h1>Articles for {{year}}</h1>
+
+{% for article in article_list %}
+    <p>{{article.headline}}</p>
+    <p>{{article.reporter.full_name }}</p>
+    <p>{{article.pub_date|date:"F j, Y"}}</p>
+{% endfor %}
+{% endblock %}
+'''
+这里面变量使用双括号括起来。例如，"."表示"输出文章标题属性的值"。但"."不仅仅用于属性查找。他们还可以用于字典查找、索引
+查找和函数调用{{article.headline}}
+
+注意，这里使用了Unix风格的“管道符”("|"字符)。这被称为模板过滤器，这是一种过滤变量值的方法。在这个例子中，日期过滤器会将
+Python的datetime对象格式化为给定的格式。{{article.pub_date|date:"F j, Y"}}
+
+可以根据需要将任意数量的过滤器串联起来。也可以编写自定义模板过滤器。可以编写自定义模板标签，在后台运行自定义Python代码。
+
+最后，Django使用了“模板继承”的概念。这就是他的作用。他的意思是“首先加载名为"base"的模板”，该模板定义了一堆块，然后用后续的块
+填充这些块。简而言之，这可以显著减少模板中的冗余：每个模板只需要定义其独有的内容。{% extend "base.html"%}
+
+"base"模板中可以是如下所示
+'''
+{% load static %}
+<html lang="en">
+<head>
+    <title>{% block title %}{% endblock %}</title>
+</head>
+<body>
+    <img src="{% static 'images/sitelogo.png' %}" alt="Logo">
+    {% block content %}{% endblock %}
+</body>
+</html>
+'''
+在这边定义了网站的外观和风格，并为其子模版提供了填补的空缺。这说明网页的重新设计只要在base模板的基础上填充数据即可
+
+这边还允许你使用不同的基础模板创建网站的多个版本，同时重复使用子模版，Django的创建者已经运用这门技术，仅需创建一个
+新的模板，即可创建出截然不同的移动版网站。
 
