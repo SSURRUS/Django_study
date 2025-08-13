@@ -1,0 +1,355 @@
+#自动化测试是什么  
+测试代码，是用来检查你的代码能否正常运行的程序
+
+测试在不同的层次中都存在。有些测试只关注某个很小的细节（某个模型的
+某个方法的返回值是否满足预期？），而另一些测试可能检查对某个软件的
+一系列操作（某一用户输入序列是否造成了预期的结果？）使用 shell 来
+测试某一方法的功能，或者运行某个应用并输入数据来检查它的行为。
+
+自动化 测试是由某个系统帮你自动完成的。当你创建好了一系列测试，每次
+修改应用代码后，就可以自动检查出修改后的代码是否还像你曾经预期的那
+样正常工作。你不需要花费大量时间来进行手动测试。
+
+#为什么需要写测试
+
+1、测试将会节约时间
+在某种程度上，能够[判断出代码是否正常工作]的测试，就是差不多可以的了。
+在更复杂的应用程序中，组件之间可能会有数十个复杂的交互。
+
+对其中某一组件的改变，也有可能造成意想不到的结果。判断[代码是否正常工作]
+意味着你需要用大量的数据来完整的测试全部代码的功能，以确保你的小修改没有
+对整体应用造成破坏--这太费时间了。
+
+尤其在发现自动化测试能够在几秒钟之内帮你完成这件事，就会觉得手动测试太来费时间
+了。当写出错误代码时，自动化测试还能帮忙定位到错误代码的位置。
+
+2、测试不仅能发现错误，而且能预防错误
+[测试是开发的对立面]，这个思想是不对的
+没有测试的话，整个应用的行为意图会变的更加不清晰。
+测试就像是从内部仔细的检查你的代码，当有些地方出错的时候，这些地方就会变得
+显眼。
+
+3、测试使代码更有吸引力
+没有测试的代码不值得信任
+
+4、测试有利于团队协作
+复杂的应用可能由团队维护。测试的存在保证了协作者不会不小心破坏了了你的代码（也保证你不会不小心弄坏他们的）
+
+#测试实践
+--首先得有个bug
+polls应用现在就有一个小bug需要被修复：要求如果Question是一天之内被发布的，Question.was_published_recently()
+方法将返回True，然而现在这个方法在Question的pub_date字段比当前时间还晚也会返回True(这是个bug)
+
+用shell命令确认一下这个bug
+'''
+$python manage.py shell
+'''
+'''
+import datetime
+from django.utils import timezone
+from polls.models import Question
+#创建一个 Question 实例，其 pub_date 设置为未来 30 天
+future_question=Question(pub_date=timezone.now()+datetime.timedelta(days=30))
+future_question.was_published_recently()_
+'''
+因为将来发生的肯定不是最近要发生的，所以这段代码明显是错误的
+
+#创建一个测试来暴露这个bug
+刚刚在shell里做的这个测试也就是自动化测试应该做的工作。因此我们要把这个改成自动化。
+Django应用的测试应该写在tests.py文件里。测试系统会自动的在所有文件寻找并执行以test开头的测试函数。
+将下面的代码写入polls应用里的test.py文件内：
+'''
+import datetime
+
+from django.test import TestCase
+from django.utils import timezone
+
+from .models import Question
+
+class QuestionTest(TestCase):
+    def test_was_published_recently_with_future_question(self):
+        time=timezone.now()+datetime.timedelta(days=30)
+        future_question=Question(pub_date=time)
+        self.assertIs(future_question.was_published_recently(), False)
+'''
+我们创建了一个django.test.TestCase的子类，并添加了一个方法，此方法创建一个pub_date时未来某天的Question实例。
+然后检查was_published_recently()方法的返回值--它应该是False
+
+#运行测试
+在终端中，输入以下代码进行运行测试
+'''
+$python manage.py test polls
+'''
+将会看到以下内容
+'''
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+F
+======================================================================
+FAIL: test_was_published_recently_with_future_question (polls.tests.QuestionModelTests)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/path/to/mysite/polls/tests.py", line 16, in test_was_published_recently_with_future_question
+    self.assertIs(future_question.was_published_recently(), False)
+AssertionError: True is not False
+
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+FAILED (failures=1)
+Destroying test database for alias 'default'...
+'''
+发生了什么？如下是自动化测试的运行过程：
+1、python manage.py test polls将会寻找polls应用里的测试代码
+2、它找到了django.test.TestCase的一个子类
+3、它创建了一个特殊的数据库供测试使用
+4、它在类中寻找测试的方法--以test开头的方法
+5、在test_was_published_recently_with_future_question方法中，它创建了一个pub_date值为30天后的Question
+实例
+6、接着使用assertls()方法，发现was_published_recently()返回True，而我们期望它返回False
+
+测试系统通知我们那些测试样例失败了，和造成测试失败的代码所在的行号
+
+#修复这个Bug
+当pub_date为未来某天时，Question.was_published_recently()应该返回False。我们修改models.py里的
+方法，让它只是在日期是过去式的时候才返回True：
+'''
+def was_published_recently(self):
+    now=timezone.now()
+    return now-datetime.timedelta(days=1)<=self.pub_date<=now
+'''
+此时再次进行测试
+'''
+Creating test database for alias 'default'...
+System check identified no issues (0 silenced).
+.
+----------------------------------------------------------------------
+Ran 1 test in 0.001s
+
+OK
+Destroying test database for alias 'default'...
+'''
+发现bug后，我们编写了能够暴露这个bug的自动化测试。在修复了bug之后，代码顺利通过了测试。
+此时可以认为这一小部分的代码会一直是安全的。
+
+#更全面的测试
+考虑全面的测试was_published_recently()这个方法以确定它的安全性，然后就可以把这个方法稳定下来。
+代码如下：
+'''
+
+def tets_was_published_recently_with_old_question(self):
+    #was_published_recently() 方法对于 pub_date 早于 1 天的提问返回 False
+    time=timezone.now()-datetime.timedelta(days=1,seconds=1)
+    old_question=Question(pub_date=time)
+    self.asserIs(old_question.was_published_recently(),False)
+
+
+def tets_was_published_recently_with_new_question(self):
+    #"was_published_recently() 方法对于 pub_date 在过去一天内的提问返回 True。"
+    time=timezone.now()-datetime.timedelta(hours=23,minutes=59,seconds=59)
+    new_question=Question(pub_date=time)
+    self.asserIs(recent_question.was_published_recently(),True)
+
+'''
+现在，我们有三个测试来确保 Question.was_published_recently() 方法对于过去，最近，
+和将来的三种情况都返回正确的值。
+
+#测试视图
+为了修复上述Bug，我们这次先编写测试代码，然后再去改代码。这是一个[测试驱动]开发模式的实例，
+顺序没有很重要。
+接下来查看需要用到的工具：
+Django测试工具之Client
+Django提供了一个供测试使用的Client来模拟用户和视图层代码的交互。我们能在test.py甚至是shell
+中使用它。我们依照惯例从shell开始，首先我们需要做一些在test.py里不是必须准备的工作。第一步是
+在shell中配置环境：
+'''
+$python manage.py shell
+'''
+'''
+from dajngo.test.utils import setup_test_environment
+setup_test_environment()
+'''
+setup_test_environment()安装了一个模板渲染器，这将使我们能够检查响应上的一些额外属性，如response.context,
+否则将无法使用此功能。这个方法不会创建一个数据库，下面的内容将针对现有的数据库运行，输出结果可能略有不同，这
+取决于你已经创建了哪些问题。如果在setting.py中的TIME_ZONE不正确，可能会得到意外的结果。
+
+导入测试客户端类：
+'''
+from django.test import Client
+client=Client()
+'''
+准备好后，可以要求客户端为我们执行一些工作：
+'''
+>>> # get a response from '/'  
+# 从 '/' 获取响应
+
+>>> response = client.get("/")  
+# 使用测试客户端发送 GET 请求到根路径 '/'，并将响应存储在变量 response 中
+
+Not Found: /  
+# 未找到：/
+
+# 我们应该预期该地址返回 404 状态码；如果你看到“无效 HTTP_HOST 头”错误和 400 响应，  
+# 可能是因为你遗漏了之前描述的 setup_test_environment() 调用。
+
+>>> response.status_code  
+404
+# 检查响应状态码，返回 404（未找到）
+
+# 另一方面，我们应该预期在 '/polls/' 路径下能找到内容
+
+# 我们将使用 reverse() 方法，而不是硬编码的 URL
+
+>>> from django.urls import reverse  
+# 从 django.urls 模块导入 reverse 函数
+
+>>> response = client.get(reverse("polls:index"))  
+# 使用 reverse("polls:index") 获取名为 "polls:index" 的 URL，并发送 GET 请求，将响应存储在 response 中
+
+>>> response.status_code  200  
+# 检查响应状态码，返回 200（成功）
+
+>>> response.content  
+b'\n    <ul>\n    \n        <li><a href="/polls/1/">What&#x27;s up?</a></li>\n    \n    </ul>\n\n'  
+# 检查响应的内容，返回 HTML 格式的字节字符串，包含一个无序列表，其中有一个链接到 "/polls/1/" 的列表项，显示为 "What's up?"
+
+>>> response.context["latest_question_list"]  
+<QuerySet [<Question: What's up?>]>  
+# 检查响应上下文中的 "latest_question_list"，返回一个包含单个 Question 对象的 QuerySet，Question 对象的字符串表示为 "What's up?"
+'''
+
+#改善视图的代码
+现在的投票会显示将来的投票（pub_date值是未来的某天）
+基于ListView的视图：
+'''
+class IndexView(generic.ListView):
+    template_name = "polls/index.html"
+    context_object_name = "latest_question_list"
+
+    def get_queryset(self):
+        return Question.objects.order_by("-pub_date")[:5]
+'''
+我们需要改进get_queryset()方法，让它能通过Question的pub_data属性与timezone.now()相比较
+来判断是否应该显示此Question。首先我们需要一行import语句：
+'''
+from django.utils import timezone
+'''
+然后我们把get_queryset方法改写成下面这样：
+'''
+def get_queryset(self):
+    """
+    Return the last five published questions (not including those set to be
+    published in the future).
+    """
+    return Question.objects.filter(pub_date__lte=timezone.now()).order_by("-pub_date")[
+        :5
+    ]
+'''
+Question.objects.filter(pub_date__lte=timezone.now()) 返回一个包含 Question 的 pub_date 
+小于或等于（即，早于或等于） timezone.now 的时间查询集。
+
+#测试新试图
+启动服务器、在浏览器中载入站点、创建一些发布时间在过去和将来的Questions，然后检验只有发布的Question
+会展示出来，每次修改可能与这个相关的代码都重复这样做--可以基于shell会话中的内容，再编写一个测试。
+
+把下面代码添加到polls/tests.py ：
+'''
+from django.urls import reverse
+'''
+写一个公用的快捷函数用于创建投票问题，再为视图创建一个测试类：
+'''
+from unittest import TestCase
+
+
+def create_question(question_text,pub_date):
+    '''
+    创建一个具有指定 `question_text` 的问题，
+    并将发布日期设置为相对于当前时间的 `days` 天数偏移
+    （负数表示过去发布的问题，正数表示尚未发布的问题）。
+    '''
+    time=timezone.now()+datetime.timedelta(days=days)
+    return Question.objects.create(question_text=question_text,pub_date=time)
+
+class QuestionIndexViewsTests(TestCase):
+    def test_no_questions(self):
+        #如果没有问题存在，则产生提示
+        response=self.client.get(reverse("polls:index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response,"No polls are available.")
+        self.assertQuerysetEqual(response.context["latest_question_list"], [])
+
+    def test_past_questions(self):
+        #发布日期（pub_date）在过去的问题会显示在索引页面上。
+        create_question("Past question",days=-30)
+        response=self.client.get(reverse("polls:index"))
+        self.asserQuerysetEqual(
+            response.context["latest_question_list"],
+            [question],
+        )
+
+    def test_future_questions(self):
+        #发布日期（pub_date）在未来的问题不会显示在索引页面上。
+        create_question(question_text="Future question.",days=30)
+        response=self.client.get(reverse("polls:index"))
+        self.assertContains(response,"No polls are available.")
+        self.assertQuerysetEqual(response.context["latest_question_list"], [])
+
+    def test_future_question_and_past_questions(self):
+        #即使过去和未来的问题都存在，也只显示过去的问题。
+        question=create_question(question_text="Past question.",day=-30)
+        create_question(question_text="Future question.",day=30)
+        response=self.client.get(reverse("polls:index"))
+        self.assertQuerysetEqual(
+            response.context["latest_question_list"],
+            [question],
+        )
+
+        def test_two_past_questions(self):
+            #问题索引页面可以显示多个问题。
+            question1=create_question(question_text="Past question 1.",days=-30)
+            question2=create_question(question_text="Past question 2.",day=-5)
+            response=self.client.get(reverse("polls:index"))
+            self.asserQuerysetEqual(
+                response.context["latest_question_list"],
+                [question2,question1],
+            )
+'''
+首先是一个快捷函数create_question,它封装了创建投票的流程，减少了重复代码
+test_no_questions不会创建任何问题，但会检查消息'No polls are available.'并验证latest_question_list是否为空。
+注意，django.test.TestCase类提供了一些额外的断言方法，在这些示例中，我们使用了 assertContains() 和 assertQuerySetEqual()。
+
+在test_past_question中，我们创建pub_date在未来某天的投票。数据库会在每次调用测试方法前被重置，所以第一个投票已经没了，所以主页
+中应该没有任何投票。
+
+#测试DetailView
+就算在发布日期未来的那些投票不会在目录页index里出现，但是如果用户知道或者猜到正确的URL，还是可以访问到他们。
+所以我们需要在DetailView里增加一点约束：
+'''
+class DetailView(generic.DetailView):
+    def get_queryset(self):
+        return Question.objects.filter(pub_date__lte=timezone.now())
+'''
+然而，我们应该增加一些测试来检验pub_date在过去的Question能够被显示出来，而pub_date在未来的则不可以
+'''
+class QuestionIndexViewsTests(TestCase):
+    def test_future_questions(self):
+        #对于发布日期（pub_date）在未来的问题，其详情视图将返回 404 未找到错误。
+        future_questions = create_question(question_text="Future questions",days=5)
+        url=reverse("polls:detail",args=(future_questions.id,))
+        response = self.client.get(url)
+        self.assertEqual(response.status_code, 404)
+
+    def test_past_questions(self):
+        #对于发布日期（pub_date）在过去的问题，其详情视图将显示问题的文本。
+        past_question=create_question(question_text="Past Questions",days=-5)
+        url=reverse("polls:detail",args=(past_question.id,))
+        response = self.client.get(url)
+        self.assertContains(response,past_question.text)
+'''
+#其他测试思路
+可以给ResultView也增加一个类似的get_queryset方法，并且为它创建测试。
+
+#测试建议
+对于每个模型和视图都建立单独的 TestClass
+每个测试方法只测试一个功能
+给每个测试方法起个能描述其功能的名字
