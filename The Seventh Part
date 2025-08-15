@@ -1,0 +1,56 @@
+#自定义后台表单
+通过admin.site.register(Question)注册Question模型，Django能够构建一个默认
+的表单用于展示。如若期望能自定义表单的外观和工作方式。可以在注册模型的时候将
+这些设置告诉Django。
+
+通过重新排列表单上的字段来看看工作形式。用以下内容替换admin.site.register(Question)：
+'''
+from django.contrib import admin
+from .models import Question
+
+class QuestionAdmin(admin.ModelAdmin):
+    fields = ["pub_date","question_text00"]
+
+admin.site.register(Question,QuestionAdmin)
+'''
+需要遵循以下流程--创建一个模型后台类，接着其作为第二个参数传递给admin.site.register()--
+在需要修改模型的后台管理选项的时候可以这么做。
+以上修改使得“Publication date”字段显示在“Question”字段之前":
+https://docs.djangoproject.com/zh-hans/5.0/_images/admin07.png
+只有两个字段的时候看起来没什么用，但是如果拥有数十个表单的话，为表单选择一个合适的排列方式
+就显得很细节了。
+'''
+from django.contrib import admin
+from .models import Question
+
+class QuestionAdmin(admin.ModelAdmin):
+    fieldsets = [
+        (None, {'fields': ['question_text']}),
+        ('Date information', {'fields': ['pub_date']}),
+    ]
+'''
+fieldsets元组中的第一个元素是字段表的标题。下面是表单现在的样子：
+https://docs.djangoproject.com/zh-hans/5.0/_images/admin08t.png
+https://docs.djangoproject.com/zh-hans/5.0/_images/admin08t.png
+
+#添加关联的对象
+有了投票的后台页。一个Question有多个Choice，但是后台页却没有显示多个选项。
+有两个方法可以解决这个问题。第一是仿照我们向后台注册Question一样注册Choice:
+'''
+from django.contrib import admin
+
+from .models import Choice, Question
+
+# ...
+admin.site.register(Choice)
+'''
+现在“Choice”在Django后台页中是一个可用的选项了。“添加选项”的表单看起来像这样：
+https://docs.djangoproject.com/zh-hans/5.0/_images/admin09.png
+在这个表单中，"Question"字段是一个包含在数据库中所有投票的选择框。Django知道要将
+ForeignKey在后台中以选择框<select>的形式展示。此时，需要一个投票。  
+
+注意"问题"旁边的"添加另一个问题"链接。每个与另一个具有'ForeignKey'关系的对象都可以
+免费获得此链接。当你点击“添加另一个问题”时，会看到一个带有“添加问题”表单的弹出窗口。
+如果在该窗口添加问题并点击“保存”,Django会将问题保存到数据库中，并将其动态添加为你
+正在查看的“添加选项”表单上的选定选项。
+
